@@ -1,0 +1,639 @@
+<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>Comparador de Verbas</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.11.3/font/bootstrap-icons.min.css" rel="stylesheet">
+  <script src="https://cdn.sheetjs.com/xlsx-latest/package/dist/xlsx.full.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/npm/exceljs@4/dist/exceljs.min.js"></script>
+  <style>
+    /* Custom styles for coloring differences */
+    .diffPositive { background-color: #d4edda !important; } /* Green for positive diff */
+    .diffNegative { background-color: #f8d7da !important; } /* Red for negative diff */
+    .noDiff { background-color: #ffffff !important; } /* White for no diff */
+    .only1 { background-color: #fff3cd !important; } /* Yellow for only in P1 */
+    .only2 { background-color: #cfe2ff !important; } /* Light blue for only in P2 */
+  </style>
+</head>
+<body>
+  <nav class="navbar navbar-expand-lg navbar-dark bg-primary">
+    <div class="container-fluid">
+      <a class="navbar-brand" href="#"><i class="bi bi-file-earmark-spreadsheet me-2"></i>Comparador de Verbas</a>
+    </div>
+  </nav>
+
+  <div class="container my-4">
+    <div class="card mb-4" id="readmeSection">
+      <div class="card-header bg-info text-white">
+        <h5 class="mb-0">
+          <button class="btn btn-link text-white text-decoration-none w-100 text-start d-flex align-items-center" type="button" data-bs-toggle="collapse" data-bs-target="#readmeCollapse" aria-expanded="true" aria-controls="readmeCollapse">
+            <i class="bi bi-info-circle me-2"></i>Sobre a Aplicação
+            <i class="bi bi-chevron-down ms-auto" id="readmeChevron"></i>
+          </button>
+        </h5>
+      </div>
+      <div class="collapse" id="readmeCollapse"> <div class="card-body">
+          <p>Bem-vindo ao <strong>Comparador de Verbas</strong>! Esta ferramenta permite que você compare dados financeiros de duas fontes distintas (ex: "Núcleo" e "Unidades") a partir de arquivos XLSX.</p>
+          <p>O objetivo é identificar rapidamente divergências, valores presentes em apenas uma das planilhas e visualizar estatísticas consolidadas, além de um comparativo lado a lado.</p>
+          <h6>Como Usar:</h6>
+          <ol>
+            <li><strong>Selecione a Planilha 1 (Núcleo):</strong> Faça o upload de um ou mais arquivos XLSX que representam os dados do núcleo.</li>
+            <li><strong>Selecione a Planilha 2 (Unidades):</strong> Faça o upload de um ou mais arquivos XLSX que representam os dados das unidades.</li>
+            <li><strong>Cabeçalho?:</strong> Marque esta opção se suas planilhas contêm uma linha de cabeçalho. Por padrão, está marcada, assumindo que a primeira linha é o cabeçalho. Se desmarcada, as colunas são assumidas como `Matrícula`, `Verba`, `Valor` nesta ordem.</li>
+            <li><strong>Comparar Agora:</strong> Clique neste botão para processar os dados e exibir as diferenças.</li>
+            <li><strong>Baixar XLSX:</strong> Após a comparação, um botão para baixar um arquivo XLSX com os resultados (Diferenças, Estatísticas e Lado a Lado) será habilitado.</li>
+            <li><strong>Reiniciar:</strong> Limpa todos os campos e resultados para uma nova comparação.</li>
+          </ol>
+          <p class="mb-0">A comparação é feita com uma tolerância numérica de `0.01` para valores monetários. Campos de texto são comparados de forma exata (após remoção de espaços extras).</p>
+        </div>
+      </div>
+    </div>
+
+    <div id="uploadSection">
+      <div class="row mb-3">
+        <div class="col-md-6">
+          <label for="nucleo" class="form-label"><i class="bi bi-upload me-2"></i>Planilha 1 (Núcleo)</label>
+          <input class="form-control" type="file" id="nucleo" multiple accept=".xlsx"
+                 data-bs-toggle="tooltip" data-bs-placement="top" title="Selecione um ou mais arquivos XLSX do Núcleo.">
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox" id="nucleoHeader">
+            <label class="form-check-label" for="nucleoHeader">A primeira linha é o cabeçalho?</label>
+          </div>
+        </div>
+        <div class="col-md-6">
+          <label for="unidades" class="form-label"><i class="bi bi-upload me-2"></i>Planilha 2 (Unidades)</label>
+          <input class="form-control" type="file" id="unidades" multiple accept=".xlsx"
+                 data-bs-toggle="tooltip" data-bs-placement="top" title="Selecione um ou mais arquivos XLSX das Unidades.">
+          <div class="form-check mt-1">
+            <input class="form-check-input" type="checkbox" id="uniHeader">
+            <label class="form-check-label" for="uniHeader">A primeira linha é o cabeçalho?</label>
+          </div>
+        </div>
+      </div>
+      <button class="btn btn-primary" id="btnCompare"
+              data-bs-toggle="tooltip" data-bs-placement="bottom" title="Inicia o processo de comparação entre as planilhas.">
+        <i class="bi bi-arrow-right-circle me-2"></i>Comparar
+      </button>
+      <button class="btn btn-success ms-2" id="btnDownload" style="display:none;"
+              data-bs-toggle="tooltip" data-bs-placement="bottom" title="Baixa um arquivo XLSX com todas as abas de resultado.">
+        <i class="bi bi-download me-2"></i>Baixar XLSX
+      </button>
+      <button class="btn btn-secondary ms-2" id="btnReset"
+              data-bs-toggle="tooltip" data-bs-placement="bottom" title="Limpa todos os dados e campos para uma nova comparação.">
+        <i class="bi bi-arrow-counterclockwise me-2"></i>Reiniciar
+      </button>
+    </div>
+
+    <div id="resultsSection" style="display:none;">
+        <ul class="nav nav-tabs mt-4" id="resultTabs">
+            <li class="nav-item">
+                <button class="nav-link active" data-bs-toggle="tab" data-bs-target="#diffTab">
+                    <i class="bi bi-exclamation-triangle me-2"></i>Diferenças
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#estatTab">
+                    <i class="bi bi-bar-chart-fill me-2"></i>Estatísticas
+                </button>
+            </li>
+            <li class="nav-item">
+                <button class="nav-link" data-bs-toggle="tab" data-bs-target="#ladoTab">
+                    <i class="bi bi-columns-gap me-2"></i>Lado a Lado
+                </button>
+            </li>
+        </ul>
+        <div class="tab-content mt-2" id="resultContent">
+            <div class="tab-pane fade show active" id="diffTab"></div>
+            <div class="tab-pane fade" id="estatTab"></div>
+            <div class="tab-pane fade" id="ladoTab"></div>
+        </div>
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.2/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+    // Ativa tooltips do Bootstrap
+    document.addEventListener('DOMContentLoaded', function () {
+      var tooltipTriggerList = [].slice.call(document.querySelectorAll('[data-bs-toggle="tooltip"]'))
+      var tooltipList = tooltipTriggerList.map(function (tooltipTriggerEl) {
+        return new bootstrap.Tooltip(tooltipTriggerEl)
+      })
+
+      // Handle the chevron icon rotation for the README collapse
+      document.getElementById('readmeCollapse').addEventListener('show.bs.collapse', function () {
+        document.getElementById('readmeChevron').classList.remove('bi-chevron-down');
+        document.getElementById('readmeChevron').classList.add('bi-chevron-up');
+      });
+
+      document.getElementById('readmeCollapse').addEventListener('hide.bs.collapse', function () {
+        document.getElementById('readmeChevron').classList.remove('bi-chevron-up');
+        document.getElementById('readmeChevron').classList.add('bi-chevron-down');
+      });
+    });
+
+    // Normaliza e guarda valor bruto
+    function normalizeRow(r) {
+      // console.log('Keys in row object for normalizeRow:', Object.keys(r)); // Uncomment for debugging headers
+
+      let raw = '';
+      // Try common variations for 'Valor' column name, case-insensitive and trimmed
+      const possibleValueKeys = ['Valor', 'valor', 'Value', 'value', 'QUANTIA', 'quantia', 'AMOUNT', 'amount', 'VALOR'];
+      for (const key of possibleValueKeys) {
+        if (r.hasOwnProperty(key) && String(r[key]).trim() !== '') {
+          raw = String(r[key]).trim();
+          break; // Found a non-empty value
+        }
+      }
+      // If no specific key found or all were empty, try iterating over all keys
+      if (raw === '') { 
+        for (const key in r) {
+          const trimmedKey = String(key).trim().toLowerCase();
+          if (trimmedKey.includes('valor') || trimmedKey.includes('value') || trimmedKey.includes('quantia') || trimmedKey.includes('amount')) {
+            if (String(r[key]).trim() !== '') {
+              raw = String(r[key]).trim();
+              break;
+            }
+          }
+        }
+      }
+      
+      const rawNorm = raw.replace(',', '.');
+      const val = parseFloat(rawNorm) || 0; // If parseFloat results in NaN (e.g., empty string), default to 0
+
+      let matricula = '';
+      const possibleMatriculaKeys = ['Matrícula', 'Matricula', 'matricula', 'ID', 'id', 'Codigo', 'codigo'];
+      for (const key of possibleMatriculaKeys) {
+        if (r.hasOwnProperty(key) && String(r[key]).trim() !== '') {
+          matricula = String(r[key]).trim();
+          break;
+        }
+      }
+      matricula = matricula.padStart(6, '0'); // Ensure padding even if found from other key
+
+      let verba = '';
+      const possibleVerbaKeys = ['Verba', 'verba', 'Item', 'item', 'Descrição', 'descrição', 'Description', 'description'];
+      for (const key of possibleVerbaKeys) {
+        if (r.hasOwnProperty(key) && String(r[key]).trim() !== '') {
+          verba = String(r[key]).trim();
+          break;
+        }
+      }
+
+      return {
+        Matricula: matricula,
+        Verba: verba,
+        Raw: rawNorm, // Store normalized raw value
+        Valor: val
+      };
+    }
+
+    // Lê todas as planilhas e concatena
+    async function readSheets(inputEl, hasHeader) {
+      let rows = [];
+      if (inputEl.files.length === 0) {
+        console.warn(`No files selected for input element: ${inputEl.id}`);
+        return []; // Return empty array if no files selected
+      }
+
+      for (let f of inputEl.files) {
+        try {
+          const buf = await f.arrayBuffer();
+          const wb = XLSX.read(buf, { type: 'array' });
+          const opts = { defval: '' }; // Keep defval as empty string
+          if (!hasHeader) opts.header = ['Matricula','Verba','Valor']; // ONLY if no header
+          const json = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], opts);
+          rows = rows.concat(json.map(normalizeRow));
+        } catch (error) {
+          console.error(`Error reading file ${f.name} for ${inputEl.id}:`, error);
+          alert(`Erro ao ler o arquivo "${f.name}". Por favor, verifique se é um arquivo XLSX válido e se a opção 'Cabeçalho?' está correta.`);
+          throw error; // Re-throw to stop further processing if a file fails
+        }
+      }
+      return rows;
+    }
+
+    // Agrega por Matrícula|Verba
+    function aggregate(data) {
+      const map = new Map();
+      data.forEach(r => {
+        // Handle cases where Matricula or Verba might be empty/invalid after normalizeRow
+        if (!r.Matricula || !r.Verba) {
+            console.warn(`Skipping row due to missing Matricula or Verba:`, r);
+            return; // Skip rows that don't have valid keys
+        }
+        const key = `${r.Matricula}|${r.Verba}`;
+        const prev = map.get(key) || { sum: 0, raw: '' }; // Initialize raw as empty string
+
+        prev.sum += r.Valor;
+        // Prioritize non-empty raw values. If current raw is empty but prev.raw has a value, keep prev.raw.
+        // If current raw has a value, use it.
+        if (r.Raw !== '' && r.Raw !== '0') { // If current row has a non-empty, non-zero raw value
+             prev.raw = r.Raw;
+        } else if (prev.raw === '') { // If previous raw was empty, use current raw (even if it's '0' or '')
+             prev.raw = r.Raw;
+        }
+       
+        map.set(key, prev);
+      });
+      return map;
+    }
+
+    // Monta array de comparação
+    function buildComp(nuc, uni) {
+      const m1 = aggregate(nuc), m2 = aggregate(uni);
+      const allKeys = [...new Set([...m1.keys(), ...m2.keys()])]
+          .sort((a, b) => {
+              const [matA, verbA] = a.split('|');
+              const [matB, verbB] = b.split('|');
+              if (matA !== matB) return matA.localeCompare(matB);
+              return verbA.localeCompare(verbB);
+          });
+
+      const differences = [];
+
+      allKeys.forEach(key => {
+          const [mat, verb] = key.split('|');
+          const e1 = m1.get(key);
+          const e2 = m2.get(key);
+
+          const v1 = e1 ? e1.sum : 0; // Use 0 if not present for numerical comparison
+          const v2 = e2 ? e2.sum : 0; // Use 0 if not present for numerical comparison
+          const d1 = e1 ? e1.raw : ''; // Display raw value
+          const d2 = e2 ? e2.raw : ''; // Display raw value
+
+          let status = null;
+          const diff = +(v1 - v2).toFixed(2); // Calculate difference
+
+          // Determine status based on presence and value difference
+          if (e1 && e2) { // Present in both
+              if (Math.abs(diff) > 0.01) {
+                  status = 'Valor Divergente';
+              } else {
+                  // No significant difference, do not add to 'Diferenças' tab
+                  // These will appear in 'Lado a Lado' with 'noDiff' class
+                  return; // Skip this entry for the 'Diferenças' tab
+              }
+          } else if (e1 && !e2) { // Only in P1
+              status = 'Apenas na P1';
+          } else if (!e1 && e2) { // Only in P2
+              status = 'Apenas na P2';
+          }
+          
+          if (status) {
+              differences.push({ Matricula: mat, Verba: verb, Raw1: d1, Raw2: d2, Status: status, Diferenca: diff });
+          }
+      });
+      return differences;
+    }
+
+    // Renderiza Diferenças
+    function renderDiff(data) {
+      let html = `<table class="table table-striped">
+        <thead><tr>
+          <th>Matrícula</th><th>Verba</th><th>Valor P1</th><th>Valor P2</th><th>Status</th><th>Diferença</th>
+        </tr></thead><tbody>`;
+      data.forEach(r => {
+        let cls = '';
+        if (r.Status === 'Valor Divergente') {
+          cls = r.Diferenca > 0 ? 'diffPositive' : 'diffNegative';
+        } else if (r.Status === 'Apenas na P1') {
+          cls = 'only1';
+        } else if (r.Status === 'Apenas na P2') {
+          cls = 'only2';
+        }
+        html += `<tr class="${cls}">
+          <td>${r.Matricula}</td>
+          <td>${r.Verba}</td>
+          <td>${r.Raw1}</td>
+          <td>${r.Raw2}</td>
+          <td>${r.Status}</td>
+          <td>${r.Diferenca != null ? r.Diferenca.toFixed(2) : ''}</td>
+        </tr>`;
+      });
+      html += '</tbody></table>';
+      if (data.length === 0) {
+        html = '<p class="alert alert-success">Nenhuma diferença significativa encontrada entre as planilhas para exibir aqui.</p>';
+      }
+      document.getElementById('diffTab').innerHTML = html;
+    }
+
+    // Renderiza Estatísticas
+    function renderEst(nuc, uni) {
+      const stats = [
+        ['Linhas P1', nuc.length],
+        ['Linhas P2', uni.length],
+        ['Matrículas Únicas P1', new Set(nuc.map(x=>x.Matricula).filter(m => m !== '')).size], // Filter out empty matriculas
+        ['Matrículas Únicas P2', new Set(uni.map(x=>x.Matricula).filter(m => m !== '')).size], // Filter out empty matriculas
+        ['Verbas Únicas P1', new Set(nuc.map(x=>x.Verba).filter(v => v !== '')).size], // Filter out empty verbas
+        ['Verbas Únicas P2', new Set(uni.map(x=>x.Verba).filter(v => v !== '')).size] // Filter out empty verbas
+      ];
+      let html = '<table class="table table-bordered"><tbody>';
+      stats.forEach(([m,v]) => html += `<tr><th>${m}</th><td>${v}</td></tr>`);
+      html += '</tbody></table>';
+      document.getElementById('estatTab').innerHTML = html;
+    }
+
+    // Renderiza Lado a Lado
+    function renderLado(nuc, uni) {
+        const m1 = aggregate(nuc);
+        const m2 = aggregate(uni);
+        let html = `<table class="table table-hover">
+            <thead><tr>
+                <th>Matrícula</th><th>Verba</th><th>Valor P1</th><th>Valor P2</th><th>Diferença</th>
+            </tr></thead><tbody>`;
+
+        const allKeys = [...new Set([...m1.keys(), ...m2.keys()])]
+            .sort((a, b) => {
+                const [matA, verbA] = a.split('|');
+                const [matB, verbB] = b.split('|');
+                if (matA !== matB) return matA.localeCompare(matB);
+                return verbA.localeCompare(verbB);
+            });
+
+        allKeys.forEach(key => {
+            const [mat, verb] = key.split('|');
+            const e1 = m1.get(key);
+            const e2 = m2.get(key);
+
+            // Use 0 for values if key not present, for consistent numerical diff calculation
+            const v1 = e1 ? e1.sum : 0; 
+            const v2 = e2 ? e2.sum : 0; 
+            const raw1 = e1 ? e1.raw : '';
+            const raw2 = e2 ? e2.raw : '';
+            
+            const diff = +(v1 - v2).toFixed(2);
+            let diffDisplay = '';
+            let cls = '';
+
+            // Determine class based on presence and value difference
+            if (e1 && e2) { // Present in both
+                if (Math.abs(diff) > 0.01) {
+                    cls = diff > 0 ? 'diffPositive' : 'diffNegative';
+                    diffDisplay = diff.toFixed(2);
+                } else {
+                    cls = 'noDiff'; // No significant difference
+                    diffDisplay = '0.00';
+                }
+            } else if (e1 && !e2) { // Only in P1
+                cls = 'only1';
+                diffDisplay = v1.toFixed(2); // Display P1 value as difference
+            } else if (!e1 && e2) { // Only in P2
+                cls = 'only2';
+                diffDisplay = `-${v2.toFixed(2)}`; // Display negative of P2 value as difference
+            } else { // Should not happen if allKeys are from m1 or m2, but for safety
+                cls = 'noDiff';
+                diffDisplay = '0.00';
+            }
+
+            html += `<tr class="${cls}">
+                <td>${mat}</td>
+                <td>${verb}</td>
+                <td>${raw1}</td>
+                <td>${raw2}</td>
+                <td>${diffDisplay}</td>
+            </tr>`;
+        });
+        if (allKeys.length === 0) {
+            html += `<tr><td colspan="5" class="text-center">Nenhum dado para exibir.</td></tr>`;
+        }
+        html += '</tbody></table>';
+        document.getElementById('ladoTab').innerHTML = html;
+    }
+
+    // Exporta XLSX com as 3 abas
+    async function exportX(comp, nuc, uni) {
+      const wb = new ExcelJS.Workbook();
+
+      // Funções auxiliares para estilização no ExcelJS
+      const getFillColor = (cssClass) => {
+          switch (cssClass) {
+              case 'diffPositive': return { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFD4EDDA' } }; // Green
+              case 'diffNegative': return { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFF8D7DA' } }; // Red
+              case 'only1': return { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF3CD' } }; // Yellow
+              case 'only2': return { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFCFE2FF' } }; // Light Blue
+              case 'noDiff': return { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFFFFF' } }; // White (explicitly white for no diff)
+              default: return undefined;
+          }
+      };
+
+
+      // Aba Diferenças
+      const ws1 = wb.addWorksheet('Diferenças');
+      ws1.columns = [
+        {header:'Matrícula',key:'Matricula', width: 12},
+        {header:'Verba',key:'Verba', width: 10},
+        {header:'Valor P1',key:'Raw1', width: 15, style: { numFmt: '0.00' }},
+        {header:'Valor P2',key:'Raw2', width: 15, style: { numFmt: '0.00' }},
+        {header:'Status',key:'Status', width: 20},
+        {header:'Diferença',key:'Diferenca', width: 15, style: { numFmt: '0.00' }}
+      ];
+      comp.forEach(r => {
+          const row = ws1.addRow({
+              Matricula: r.Matricula,
+              Verba: r.Verba,
+              Raw1: parseFloat(r.Raw1) || 0, // Ensure numbers for excel
+              Raw2: parseFloat(r.Raw2) || 0,
+              Status: r.Status,
+              Diferenca: r.Diferenca
+          });
+          let rowClass = '';
+          if (r.Status === 'Valor Divergente') {
+            rowClass = r.Diferenca > 0 ? 'diffPositive' : 'diffNegative';
+          } else if (r.Status === 'Apenas na P1') {
+            rowClass = 'only1';
+          } else if (r.Status === 'Apenas na P2') {
+            rowClass = 'only2';
+          }
+          const fill = getFillColor(rowClass);
+          if (fill) {
+              row.eachCell(cell => {
+                  cell.fill = fill;
+              });
+          }
+      });
+
+
+      // Aba Estatísticas
+      const ws2 = wb.addWorksheet('Estatísticas');
+      ws2.columns = [
+        {header:'Métrica',key:'m', width: 30},
+        {header:'Valor',key:'v', width: 15}
+      ];
+      document.querySelectorAll('#estatTab table tbody tr').forEach(tr => {
+        const [th, td] = tr.children;
+        ws2.addRow({ m: th.textContent, v: td.textContent });
+      });
+
+      // Aba Lado a Lado
+      const ws3 = wb.addWorksheet('Lado a Lado');
+      ws3.columns = [
+        {header:'Matrícula',key:'Matricula', width: 12},
+        {header:'Verba',key:'Verba', width: 10},
+        {header:'Valor P1',key:'Raw1', width: 15, style: { numFmt: '0.00' }},
+        {header:'Valor P2',key:'Raw2', width: 15, style: { numFmt: '0.00' }},
+        {header:'Diferença',key:'Diferenca', width: 15, style: { numFmt: '0.00' }}
+      ];
+      
+      const m1 = aggregate(nuc);
+      const m2 = aggregate(uni);
+      const allKeys = [...new Set([...m1.keys(), ...m2.keys()])].sort((a, b) => {
+          const [matA, verbA] = a.split('|');
+          const [matB, verbB] = b.split('|');
+          if (matA !== matB) return matA.localeCompare(matB);
+          return verbA.localeCompare(verbB);
+      });
+
+      allKeys.forEach(key => {
+          const [mat, verb] = key.split('|');
+          const e1 = m1.get(key);
+          const e2 = m2.get(key);
+
+          const v1 = e1 ? e1.sum : 0;
+          const v2 = e2 ? e2.sum : 0;
+          const raw1 = e1 ? e1.raw : '';
+          const raw2 = e2 ? e2.raw : '';
+          
+          const diff = +(v1 - v2).toFixed(2);
+          let diffDisplay = '';
+          let rowClass = '';
+
+          if (e1 && e2) { // Present in both
+              if (Math.abs(diff) > 0.01) {
+                  diffDisplay = diff.toFixed(2);
+                  rowClass = diff > 0 ? 'diffPositive' : 'diffNegative';
+              } else {
+                  diffDisplay = '0.00';
+                  rowClass = 'noDiff';
+              }
+          } else if (e1 && !e2) { // Only in P1
+              diffDisplay = v1.toFixed(2);
+              rowClass = 'only1';
+          } else if (!e1 && e2) { // Only in P2
+              diffDisplay = `-${v2.toFixed(2)}`;
+              rowClass = 'only2';
+          } else {
+              diffDisplay = '0.00'; // Should not happen if allKeys logic is correct
+              rowClass = 'noDiff';
+          }
+
+          const row = ws3.addRow({
+              Matricula: mat,
+              Verba: verb,
+              Raw1: parseFloat(raw1) || 0, // Convert to number for Excel
+              Raw2: parseFloat(raw2) || 0, // Convert to number for Excel
+              Diferenca: parseFloat(diffDisplay) || 0 // Convert to number for Excel
+          });
+
+          const fill = getFillColor(rowClass);
+          if (fill) {
+              row.eachCell(cell => {
+                  cell.fill = fill;
+              });
+          }
+      });
+
+      const buf = await wb.xlsx.writeBuffer();
+      const blob = new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a'); a.href = url;
+      a.download = 'comparacao.xlsx'; a.click(); URL.revokeObjectURL(url);
+    }
+
+    // Ação do botão Comparar
+    document.getElementById('btnCompare').addEventListener('click', async () => {
+      console.log('Comparar Agora button clicked!');
+
+      const nucleoInput = document.getElementById('nucleo');
+      const uniInput = document.getElementById('unidades');
+
+      if (nucleoInput.files.length === 0 || uniInput.files.length === 0) {
+          alert('Por favor, selecione arquivos para ambas as planilhas antes de comparar.');
+          console.warn('File inputs are empty.');
+          return; // Stop execution if files are missing
+      }
+
+      try {
+          // Read sheets
+          const nuc = await readSheets(nucleoInput, document.getElementById('nucleoHeader').checked);
+          const uni = await readSheets(uniInput, document.getElementById('uniHeader').checked);
+
+          // Handle case where sheets might be empty after reading (e.g. malformed file)
+          if (nuc.length === 0 && uni.length === 0) {
+              alert('Nenhum dado válido foi encontrado em ambas as planilhas. Por favor, verifique os arquivos e a opção "Cabeçalho?".');
+              console.warn('Both sheets returned empty data arrays.');
+              return;
+          }
+
+          const comp = buildComp(nuc, uni);
+
+          // Esconde README e exibe abas de resultado
+          const readmeCollapseElement = document.getElementById('readmeCollapse');
+          const readmeCollapseInstance = bootstrap.Collapse.getInstance(readmeCollapseElement) || new bootstrap.Collapse(readmeCollapseElement, { hide: true });
+          readmeCollapseInstance.hide();
+          
+          // Use Bootstrap's 'hidden.bs.collapse' event to ensure animation completes
+          // before changing display style, for smoother transition.
+          readmeCollapseElement.addEventListener('hidden.bs.collapse', () => {
+              document.getElementById('readmeSection').style.display = 'none';
+              document.getElementById('resultsSection').style.display = 'block';
+              // Activate the first tab after results are shown
+              const firstTabTrigger = document.querySelector('#resultTabs .nav-link');
+              bootstrap.Tab.getInstance(firstTabTrigger).show();
+          }, { once: true });
+
+
+          // Preenche cada aba
+          renderDiff(comp);
+          renderEst(nuc, uni);
+          renderLado(nuc, uni);
+          console.log('Tables rendered.');
+
+          // Ativa download
+          const btnD = document.getElementById('btnDownload');
+          btnD.style.display = 'inline-block';
+          btnD.onclick = () => exportX(comp, nuc, uni);
+          console.log('Download button activated.');
+
+      } catch (error) {
+          console.error("An error occurred during comparison:", error);
+          // Only show generic error if not already handled by readSheets
+          if (!error.message.includes('Erro ao ler o arquivo')) {
+            alert("Ocorreu um erro inesperado ao processar as planilhas. Verifique o console para mais detalhes.");
+          }
+      }
+    });
+
+    // Ação do botão Reset
+    document.getElementById('btnReset').addEventListener('click', () => {
+      console.log('Reset button clicked!');
+
+      // Clear file inputs
+      document.getElementById('nucleo').value = '';
+      document.getElementById('unidades').value = '';
+
+      // Reset header checkboxes to unchecked by default
+      document.getElementById('nucleoHeader').checked = false;
+      document.getElementById('uniHeader').checked = false;
+
+      // Esconde resultados e exibe README
+      document.getElementById('resultsSection').style.display = 'none';
+      document.getElementById('readmeSection').style.display = 'block';
+
+      const readmeCollapseElement = document.getElementById('readmeCollapse');
+      const readmeCollapseInstance = bootstrap.Collapse.getInstance(readmeCollapseElement) || new bootstrap.Collapse(readmeCollapseElement, { show: true });
+      readmeCollapseInstance.show(); // Ensure it shows on reset
+
+      // Clear the content of result tabs
+      document.getElementById('diffTab').innerHTML = '';
+      document.getElementById('estatTab').innerHTML = '';
+      document.getElementById('ladoTab').innerHTML = '';
+
+      // Hide download button
+      document.getElementById('btnDownload').style.display = 'none';
+      console.log('Application reset.');
+    });
+  </script>
+</body>
+</html>
